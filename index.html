@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lamp Login</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a dark room. One enamel lamp hangs over the sign-in card; a pull cord switches the light, and the beam lifts the card out of the dark. */
+:root {
+  --room: #0e0c11;
+  --room-2: #1a151d;
+  --card: rgb(22 18 27 / 0.92);
+  --shade: #2a4239;
+  --shade-hi: #416a5c;
+  --shade-dark: #17211e;
+  --brass: #c9a050;
+  --brass-dark: #7f5f27;
+  --wire: #5b5463;
+  --light-rgb: 255 214 138;
+  --light: #ffd68a;
+  --bulb-off: #4b4337;
+  --bulb-on: #fff4d0;
+  --ink: #f5eddc;
+  --muted: #a99f8e;
+  --line: #2f2836;
+  --field: #130f18;
+  --danger: #ff9d8a;
+  --on-light: #1b1408;
+  --display: 'Bricolage Grotesque', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: var(--room);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 16px;
+  line-height: 1.5;
+  padding-inline: 16px;
+  padding-block: 0 56px;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+
+.room {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--room-2), var(--room) 62%);
+}
+.glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(70% 52% at 50% 24%, rgb(var(--light-rgb) / 0.17), transparent 74%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.stage {
+  position: relative;
+  z-index: 1;
+  max-width: 440px;
+  margin-inline: auto;
+}
+
+/* ---------- lamp ---------- */
+.lamp {
+  position: relative;
+  z-index: 2;
+  width: 220px;
+  height: 200px;
+  margin-inline: auto;
+  transform-origin: 50% 0;
+}
+.lampsvg { display: block; overflow: visible; }
+.wire { stroke: var(--wire); stroke-width: 1.5; }
+.cap { fill: var(--brass); }
+.rim { fill: var(--shade-dark); stroke: var(--brass); stroke-width: 1.5; transition: fill 0.45s ease; }
+.bulb { fill: var(--bulb-off); transition: fill 0.35s ease; }
+.halo { opacity: 0; transition: opacity 0.5s ease; }
+
+.beam {
+  position: absolute;
+  left: 50%;
+  top: var(--bulb-y, 128px);
+  width: min(640px, 100vw);
+  height: 560px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgb(var(--light-rgb) / 0.28), rgb(var(--light-rgb) / 0.09) 55%, transparent);
+}
+
+.stage.on .rim { fill: var(--light); }
+.stage.on .bulb { fill: var(--bulb-on); }
+.stage.on .halo,
+.stage.on .beam { opacity: 1; }
+.stage.on ~ .glow { opacity: 1; }
+
+/* 3D lamp: a WebGL canvas sits over the SVG, which stays as a fallback */
+.lampgl {
+  position: absolute;
+  left: -20px;
+  top: 0;
+  width: 260px;
+  height: 230px;
+  display: none;
+  pointer-events: none;
+}
+.stage.three .lampgl { display: block; }
+.stage.three .lampsvg { visibility: hidden; }
+.bloom {
+  position: absolute;
+  left: 110px;
+  top: var(--bulb-y, 134px);
+  width: 200px;
+  height: 200px;
+  margin: -100px 0 0 -100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--light-rgb) / 0.6), rgb(var(--light-rgb) / 0.16) 38%, transparent 68%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  display: none;
+}
+.stage.three .bloom { display: block; }
+.stage.on .bloom { opacity: 1; }
+
+/* pull cord */
+.cord { position: absolute; left: 168px; top: 132px; width: 0; height: 0; }
+.cord-line {
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: calc(54px + var(--pull, 0px));
+  background: repeating-linear-gradient(135deg, #d9b568 0 2px, var(--brass-dark) 2px 4px);
+  filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.55));
+  transition: height 0.32s cubic-bezier(0.3, 1.7, 0.5, 1);
+}
+.bead {
+  position: absolute;
+  left: -8px;
+  top: calc(54px + var(--pull, 0px));
+  width: 16px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px 8px 10px 10px / 6px 6px 13px 13px;
+  background: radial-gradient(ellipse at 32% 26%, #fff0c4 0, #e3c27a 18%, var(--brass) 48%, var(--brass-dark) 100%);
+  box-shadow: 1px 3px 5px rgb(0 0 0 / 0.6), inset -2px -3px 4px rgb(0 0 0 / 0.35);
+  cursor: grab;
+  touch-action: none;
+  transition: top 0.32s cubic-bezier(0.3, 1.7, 0.5, 1);
+}
+.bead::after { content: ''; position: absolute; inset: -12px -16px; }
+.bead:focus-visible { outline: 2px solid var(--light); outline-offset: 4px; }
+.stage.dragging .cord-line,
+.stage.dragging .bead { transition: none; }
+.stage.dragging .bead { cursor: grabbing; }
+.hint {
+  position: absolute;
+  right: 16px;
+  top: 58px;
+  width: max-content;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  pointer-events: none;
+}
+
+/* ---------- card ---------- */
+.card {
+  position: relative;
+  margin-top: 36px;
+  padding: 30px 24px 22px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 30px 60px -32px #000;
+  opacity: 0.14;
+  transition: opacity 0.6s ease, border-color 0.6s ease;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(110% 60% at 50% 0%, rgb(var(--light-rgb) / 0.14), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.stage.on .card { opacity: 1; border-color: rgb(var(--light-rgb) / 0.3); }
+.stage.on .card::before { opacity: 1; }
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 2.1rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-variation-settings: 'opsz' 60;
+  text-wrap: balance;
+}
+.sub { margin: 0 0 24px; color: var(--muted); font-size: 0.95rem; }
+
+form { display: flex; flex-direction: column; gap: 18px; }
+.field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+label, .label {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.control { position: relative; display: flex; }
+input[type="email"], input[type="password"], input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+  outline: 2px solid transparent;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+input::placeholder { color: #6f6779; }
+input:focus-visible {
+  border-color: var(--light);
+  box-shadow: 0 0 0 3px rgb(var(--light-rgb) / 0.22);
+}
+input[aria-invalid="true"] { border-color: var(--danger); }
+.control input { padding-right: 68px; }
+.reveal {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  height: 40px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.reveal:hover { color: var(--ink); }
+.reveal:focus-visible { outline: 2px solid var(--light); outline-offset: -2px; }
+.err { min-height: 0; margin: 0; color: var(--danger); font-size: 0.85rem; }
+.err:empty { display: none; }
+
+.row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.check { display: inline-flex; align-items: center; gap: 9px; font-size: 0.92rem; color: var(--ink); cursor: pointer; font-family: var(--display); text-transform: none; letter-spacing: 0; }
+.check input { width: 18px; height: 18px; margin: 0; accent-color: var(--light); }
+a { color: var(--light); text-underline-offset: 3px; }
+a:focus-visible { outline: 2px solid var(--light); outline-offset: 3px; border-radius: 2px; }
+.row a { font-size: 0.92rem; }
+
+.submit {
+  position: relative;
+  height: 50px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--light);
+  color: var(--on-light);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.2s ease;
+}
+.submit:hover { filter: brightness(1.06); }
+.submit:active { transform: translateY(1px); }
+.submit:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.submit[disabled] { cursor: progress; filter: brightness(0.9); }
+.submit.loading { color: transparent; }
+.submit.loading::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2.5px solid rgb(27 20 8 / 0.25);
+  border-top-color: var(--on-light);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.foot { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; font-size: 0.9rem; color: var(--muted); }
+.foot .demo { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.done h2 { margin: 0 0 8px; font-size: 1.7rem; font-weight: 650; letter-spacing: -0.01em; }
+.done p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.done .note { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+.ghost {
+  height: 44px;
+  padding: 0 18px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.ghost:hover { border-color: var(--light); }
+.ghost:focus-visible { outline: 2px solid var(--light); outline-offset: 3px; }
+
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- motion ---------- */
+@keyframes swing {
+  0% { transform: rotate(0); }
+  18% { transform: rotate(2.4deg); }
+  42% { transform: rotate(-1.6deg); }
+  66% { transform: rotate(0.8deg); }
+  84% { transform: rotate(-0.3deg); }
+  100% { transform: rotate(0); }
+}
+@keyframes flick {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  14% { opacity: 0.15; }
+  26% { opacity: 0.9; }
+  34% { opacity: 0.3; }
+  50%, 100% { opacity: 1; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.stage.swing .lamp { animation: swing 1.8s ease-out; }
+.stage.flick .beam,
+.stage.flick .bloom,
+.stage.flick .halo { animation: flick 0.9s linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.swing .lamp,
+  .stage.flick .beam,
+  .stage.flick .bloom,
+  .stage.flick .halo,
+  .submit.loading::after { animation: none; }
+  .cord-line, .bead, .card, .card::before, .beam, .bloom, .halo, .glow, .rim, .bulb { transition-duration: 0.01ms; }
+}
+
+@media (max-width: 420px) {
+  .card { padding: 26px 18px 20px; }
+  h1 { font-size: 1.9rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="room" aria-hidden="true"></div>
+<main class="stage on" id="stage">
+  <div class="lamp" id="lamp">
+    <div class="beam" aria-hidden="true"></div>
+    <svg class="lampsvg" viewBox="0 0 220 170" width="220" height="170" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="shadeG" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" style="stop-color:var(--shade)"></stop>
+          <stop offset="0.38" style="stop-color:var(--shade-hi)"></stop>
+          <stop offset="1" style="stop-color:var(--shade)"></stop>
+        </linearGradient>
+        <radialGradient id="halo">
+          <stop offset="0" style="stop-color:rgb(var(--light-rgb));stop-opacity:0.8"></stop>
+          <stop offset="0.4" style="stop-color:rgb(var(--light-rgb));stop-opacity:0.24"></stop>
+          <stop offset="1" style="stop-color:rgb(var(--light-rgb));stop-opacity:0"></stop>
+        </radialGradient>
+      </defs>
+      <line class="wire" x1="110" y1="0" x2="110" y2="38"></line>
+      <rect class="cap" x="102" y="36" width="16" height="14" rx="2"></rect>
+      <path d="M110 50 C74 50 54 88 38 128 H182 C166 88 146 50 110 50 Z" fill="url(#shadeG)"></path>
+      <circle class="halo" cx="110" cy="136" r="74" fill="url(#halo)"></circle>
+      <ellipse class="rim" cx="110" cy="128" rx="72" ry="9"></ellipse>
+      <circle class="bulb" cx="110" cy="133" r="9"></circle>
+    </svg>
+    <canvas class="lampgl" id="gl" aria-hidden="true"></canvas>
+    <div class="bloom" aria-hidden="true"></div>
+    <div class="cord" id="cord">
+      <div class="cord-line"></div>
+      <p class="hint" id="hint">Pull to turn off</p>
+      <button class="bead" id="switch" type="button" aria-pressed="true" aria-label="Lamp pull cord"></button>
+    </div>
+  </div>
+
+  <section class="card" id="card" aria-labelledby="title">
+    <form id="form" novalidate>
+      <div>
+        <h1 id="title">Sign in</h1>
+        <p class="sub">Welcome back. The form works while the lamp is on.</p>
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" placeholder="you@studio.com" aria-describedby="email-err">
+        <p class="err" id="email-err" role="alert"></p>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="control">
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="At least 8 characters" aria-describedby="password-err">
+          <button class="reveal" id="reveal" type="button" aria-pressed="false" aria-controls="password">Show</button>
+        </div>
+        <p class="err" id="password-err" role="alert"></p>
+      </div>
+
+      <div class="row">
+        <label class="check" for="remember"><input id="remember" name="remember" type="checkbox"> Keep me signed in</label>
+        <a href="#" id="forgot">Forgot password?</a>
+      </div>
+
+      <button class="submit" id="submit" type="submit">Sign in</button>
+    </form>
+
+    <div class="done" id="done" hidden tabindex="-1">
+      <h2>You're in</h2>
+      <p>Signed in as <strong id="doneEmail"></strong>.</p>
+      <p class="note">This is a demo page. Nothing was sent anywhere.</p>
+      <button class="ghost" id="back" type="button">Back to sign in</button>
+    </div>
+
+    <p class="foot"><span>New here? <a href="#" id="create">Create an account</a></span><span class="demo">Demo form</span></p>
+  </section>
+</main>
+<div class="glow" aria-hidden="true"></div>
+<p class="sr" id="status" role="status"></p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var flickStart = 0;
+  var stage = document.getElementById('stage');
+  var card = document.getElementById('card');
+  var sw = document.getElementById('switch');
+  var hint = document.getElementById('hint');
+  var status = document.getElementById('status');
+  var on = true;
+
+  function render() {
+    stage.classList.toggle('on', on);
+    card.inert = !on;
+    sw.setAttribute('aria-pressed', String(on));
+    hint.textContent = on ? 'Pull to turn off' : 'Pull to turn on';
+    status.textContent = on ? 'Light on' : 'Light off';
+  }
+  function restart(cls) {
+    stage.classList.remove(cls);
+    void stage.offsetWidth;
+    stage.classList.add(cls);
+  }
+  function setLight(next) {
+    on = next;
+    render();
+    if (on) { restart('flick'); flickStart = performance.now(); }
+    restart('swing');
+  }
+  function tug() {
+    stage.style.setProperty('--pull', '16px');
+    setTimeout(function () { stage.style.setProperty('--pull', '0px'); }, 150);
+  }
+
+  var startY = null, dy = 0, fired = false;
+  sw.addEventListener('pointerdown', function (e) {
+    startY = e.clientY; dy = 0; fired = false;
+    try { sw.setPointerCapture(e.pointerId); } catch (err) {}
+    stage.classList.add('dragging');
+  });
+  sw.addEventListener('pointermove', function (e) {
+    if (startY === null) return;
+    dy = Math.max(0, Math.min(44, e.clientY - startY));
+    stage.style.setProperty('--pull', dy + 'px');
+    if (dy >= 26 && !fired) { fired = true; setLight(!on); }
+  });
+  sw.addEventListener('pointerup', function () {
+    if (startY === null) return;
+    var tap = dy < 4 && !fired;
+    startY = null;
+    stage.classList.remove('dragging');
+    if (tap) { tug(); setLight(!on); }
+    else stage.style.setProperty('--pull', '0px');
+  });
+  sw.addEventListener('pointercancel', function () {
+    startY = null;
+    stage.classList.remove('dragging');
+    stage.style.setProperty('--pull', '0px');
+  });
+  // Keyboard and assistive-tech activation arrive as a click with no pointer detail.
+  sw.addEventListener('click', function (e) {
+    if (e.detail === 0) { tug(); setLight(!on); }
+  });
+
+  /* ---------- form ---------- */
+  var form = document.getElementById('form');
+  var email = document.getElementById('email');
+  var pw = document.getElementById('password');
+  var reveal = document.getElementById('reveal');
+  var submit = document.getElementById('submit');
+  var done = document.getElementById('done');
+  var doneEmail = document.getElementById('doneEmail');
+
+  function setErr(input, msg) {
+    document.getElementById(input.id + '-err').textContent = msg;
+    input.setAttribute('aria-invalid', msg ? 'true' : 'false');
+  }
+  reveal.addEventListener('click', function () {
+    var show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    reveal.textContent = show ? 'Hide' : 'Show';
+    reveal.setAttribute('aria-pressed', String(show));
+  });
+  email.addEventListener('input', function () { if (email.getAttribute('aria-invalid') === 'true') setErr(email, ''); });
+  pw.addEventListener('input', function () { if (pw.getAttribute('aria-invalid') === 'true') setErr(pw, ''); });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = email.value.trim();
+    var bad = null;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      setErr(email, 'Enter an email address like you@studio.com.');
+      bad = bad || email;
+    } else setErr(email, '');
+    if (pw.value.length < 8) {
+      setErr(pw, 'Your password needs at least 8 characters.');
+      bad = bad || pw;
+    } else setErr(pw, '');
+    if (bad) { bad.focus(); return; }
+
+    submit.disabled = true;
+    submit.classList.add('loading');
+    setTimeout(function () {
+      submit.disabled = false;
+      submit.classList.remove('loading');
+      doneEmail.textContent = v;
+      form.hidden = true;
+      done.hidden = false;
+      done.focus();
+    }, 900);
+  });
+  document.getElementById('back').addEventListener('click', function () {
+    done.hidden = true;
+    form.hidden = false;
+    form.reset();
+    pw.type = 'password';
+    reveal.textContent = 'Show';
+    reveal.setAttribute('aria-pressed', 'false');
+    email.focus();
+  });
+  ['forgot', 'create'].forEach(function (id) {
+    document.getElementById(id).addEventListener('click', function (e) { e.preventDefault(); });
+  });
+
+  /* ---------- 3D lamp (three.js) ---------- */
+  // World units are pixels. The ceiling is y = 0 and the lamp hangs down the negative y axis.
+  function initLamp3D() {
+    if (!window.THREE) return;
+    var T = window.THREE;
+    var W = 260, H = 230;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var canvas = document.getElementById('gl');
+    var renderer;
+    try {
+      renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
+    } catch (err) { return; }
+    try {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(W, H, false);
+      renderer.setClearColor(0x000000, 0);
+      renderer.outputEncoding = T.sRGBEncoding;
+      renderer.toneMapping = T.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+
+      var scene = new T.Scene();
+      var camera = new T.PerspectiveCamera(22, W / H, 50, 2000);
+      camera.position.set(0, -215, 591);
+      camera.lookAt(0, -115, 0);
+      camera.updateMatrixWorld(true);
+
+      // Small studio-style environment so enamel and brass have something to reflect.
+      var ec = document.createElement('canvas');
+      ec.width = 512; ec.height = 256;
+      var g = ec.getContext('2d');
+      var grad = g.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0, '#12151c');
+      grad.addColorStop(0.46, '#3b4452');
+      grad.addColorStop(0.52, '#76603f');
+      grad.addColorStop(1, '#0b0a0d');
+      g.fillStyle = grad; g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#fff1d6'; g.fillRect(96, 36, 96, 52);
+      g.fillStyle = '#dbe6ff'; g.fillRect(372, 56, 56, 30);
+      var envTex = new T.CanvasTexture(ec);
+      envTex.mapping = T.EquirectangularReflectionMapping;
+      envTex.encoding = T.sRGBEncoding;
+      var pmrem = new T.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromEquirectangular(envTex).texture;
+      envTex.dispose(); pmrem.dispose();
+
+      var envMats = [];
+      function track(m) { envMats.push(m); return m; }
+      var enamel = track(new T.MeshPhysicalMaterial({ color: 0x2b5445, metalness: 0.4, roughness: 0.3, clearcoat: 0.9, clearcoatRoughness: 0.18, side: T.DoubleSide }));
+      var lining = track(new T.MeshStandardMaterial({ color: 0xece4cf, metalness: 0.05, roughness: 0.55, emissive: 0xffc66e, emissiveIntensity: 0, side: T.DoubleSide }));
+      var brass = track(new T.MeshStandardMaterial({ color: 0xc9a050, metalness: 0.9, roughness: 0.28 }));
+      var wireMat = track(new T.MeshStandardMaterial({ color: 0x2a2630, metalness: 0.2, roughness: 0.6 }));
+      var glass = new T.MeshPhysicalMaterial({ color: 0x3b362e, emissive: 0xffd68a, emissiveIntensity: 0, metalness: 0, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
+      track(glass);
+
+      var lampGroup = new T.Group();
+      scene.add(lampGroup);
+      function add(geo, mat, x, y, z) {
+        var m = new T.Mesh(geo, mat);
+        m.position.set(x || 0, y || 0, z || 0);
+        lampGroup.add(m);
+        return m;
+      }
+
+      // supply wire and ceiling rose
+      add(new T.CylinderGeometry(1.2, 1.2, 60, 12), wireMat, 0, -4, 0);
+      add(new T.CylinderGeometry(15, 17, 9, 40), brass, 0, 0, 0);
+      add(new T.CylinderGeometry(6, 9, 8, 32), brass, 0, -36, 0);
+      add(new T.CylinderGeometry(8.5, 8.5, 14, 32), brass, 0, -44, 0);
+
+      // dome shade: an outer enamel shell and a white lining, both revolved around the y axis
+      var N = 32, SH = 78, SR = 72, TOP = -50;
+      var outerPts = [], innerPts = [];
+      for (var i = N; i >= 0; i--) {
+        var th = (i / N) * (Math.PI / 2) * 0.985;
+        var r = SR * Math.sin(th);
+        var y = TOP - SH * (1 - Math.cos(th));
+        outerPts.push(new T.Vector2(Math.max(r, 0.01), y));
+        innerPts.push(new T.Vector2(Math.max(r - 2.4, 0.01), y - 2.2 * Math.cos(th)));
+      }
+      add(new T.LatheGeometry(outerPts, 96), enamel);
+      add(new T.LatheGeometry(innerPts, 96), lining);
+
+      var lip = add(new T.TorusGeometry(71.2, 1.7, 14, 96), brass, 0, -128, 0);
+      lip.rotation.x = Math.PI / 2;
+      var band = add(new T.TorusGeometry(70.7, 1.2, 12, 96), brass, 0, -112, 0);
+      band.rotation.x = Math.PI / 2;
+
+      // socket stem and bulb
+      add(new T.CylinderGeometry(3.2, 3.2, 72, 16), brass, 0, -88, 0);
+      add(new T.CylinderGeometry(6.2, 6.2, 10, 24), brass, 0, -124, 0);
+      var bulb = add(new T.SphereGeometry(10.5, 40, 28), glass, 0, -135, 0);
+      bulb.scale.set(1, 1.15, 1);
+
+      // lights
+      var hemi = new T.HemisphereLight(0x8fa4ff, 0x24170b, 0.3);
+      scene.add(hemi);
+      var key = new T.DirectionalLight(0xdfe7ff, 0.3);
+      key.position.set(-220, 40, 320);
+      scene.add(key);
+      var rimLight = new T.DirectionalLight(0xffa05a, 0.2);
+      rimLight.position.set(260, -30, -200);
+      scene.add(rimLight);
+      var bulbLight = new T.PointLight(0xffd08a, 0, 420, 1);
+      bulbLight.position.set(0, -131, 0);
+      scene.add(bulbLight);
+
+      var offGlass = new T.Color(0x3b362e), onGlass = new T.Color(0xfff6dc);
+      var lvl = 0;
+      function apply(l) {
+        bulbLight.intensity = 2.4 * l;
+        glass.emissiveIntensity = 2.6 * l;
+        glass.color.copy(offGlass).lerp(onGlass, l);
+        lining.emissiveIntensity = 0.55 * l;
+        key.intensity = 0.25 + 0.4 * l;
+        rimLight.intensity = 0.15 + 0.3 * l;
+        hemi.intensity = 0.25 + 0.2 * l;
+        var e = 0.3 + 0.55 * l;
+        for (var k = 0; k < envMats.length; k++) envMats[k].envMapIntensity = e;
+      }
+
+      // The CSS beam, bloom and pull cord line up with the projected bulb and shade rim.
+      function toPx(x, y, z) {
+        var v = new T.Vector3(x, y, z).project(camera);
+        return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H };
+      }
+      var lampEl = document.getElementById('lamp');
+      var cordEl = document.getElementById('cord');
+      var bulbPx = toPx(0, -135, 0);
+      var cordPx = toPx(54, -128, Math.sqrt(72 * 72 - 54 * 54));
+      lampEl.style.setProperty('--bulb-y', bulbPx.y.toFixed(1) + 'px');
+      cordEl.style.left = (cordPx.x - 20).toFixed(1) + 'px';
+      cordEl.style.top = cordPx.y.toFixed(1) + 'px';
+
+      var FL = [[0, 0], [72, 1], [126, 0.15], [234, 0.9], [306, 0.3], [450, 1], [900, 1]];
+      function flickLevel(t) {
+        for (var j = 0; j < FL.length; j++) {
+          if (t <= FL[j][0]) {
+            if (j === 0) return 0;
+            var a = FL[j - 1], b = FL[j];
+            return a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]);
+          }
+        }
+        return 1;
+      }
+
+      apply(0);
+      renderer.render(scene, camera);
+      stage.classList.add('three');
+
+      var last = performance.now();
+      (function frame(now) {
+        var dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+        var target = on ? 1 : 0;
+        var t = now - flickStart;
+        if (flickStart && !reduce && t < 900) {
+          lvl = flickLevel(t);
+        } else {
+          flickStart = 0;
+          lvl = reduce ? target : lvl + (target - lvl) * (1 - Math.exp(-dt * 9));
+        }
+        apply(lvl);
+        renderer.render(scene, camera);
+        requestAnimationFrame(frame);
+      })(last);
+    } catch (err) {
+      stage.classList.remove('three');
+    }
+  }
+
+  render();
+  flickStart = performance.now();
+  initLamp3D();
+  requestAnimationFrame(function () { stage.classList.add('flick'); });
+})();
+</script>
+
+</body>
+</html>
